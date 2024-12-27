@@ -45,32 +45,38 @@ func main() {
 	}
 
 	for i := 0; i < poolSize; i++ {
-		result := <-resCh
-		atomic.AddUint64(&total, result.duration)
+		go func() {
+			result := <-resCh
+			atomic.AddUint64(&total, result.duration)
+		}()
 	}
-	close(resCh)
-
-	timeEnd := time.Now()
-	duration := uint64(timeEnd.Sub(timeStart).Seconds())
 
 	wg.Wait()
+	duration := getDuration(timeStart)
+	close(resCh)
+
 	slog.Info("Total jobs done duration", "seconds", total)
 	slog.Info("Main goroutine work duration", "seconds", duration)
 }
 
 func (j *DataJob) doDataJob(ch chan JobInfo, wg *sync.WaitGroup) {
+	defer sendJobInfo(ch, j.id, time.Now())
 	defer wg.Done()
 
-	timeStart := time.Now()
-
 	time.Sleep(time.Duration(rand.Intn(5)+1) * time.Second)
+}
 
+func sendJobInfo(ch chan JobInfo, jobId int, timeStart time.Time) {
+	duration := getDuration(timeStart)
+
+	ch <- JobInfo{id: jobId, duration: duration}
+
+	slog.Info("Done datajob", "id", jobId, "duration", duration)
+}
+
+func getDuration(timeStart time.Time) uint64 {
 	timeEnd := time.Now()
-	duration := uint64(timeEnd.Sub(timeStart).Seconds())
-
-	ch <- JobInfo{id: j.id, duration: duration}
-
-	slog.Info("Done datajob", "id", j.id, "duration", duration)
+	return uint64(timeEnd.Sub(timeStart).Seconds())
 }
 
 // Задача 3: Пул рабочих горутин с подсчётом времени и сбором результатов
